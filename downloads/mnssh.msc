@@ -1,0 +1,1412 @@
+using System;
+using Console;
+using Surface;
+using Util;
+using SSH;
+using Event;
+using Player;
+using Net;
+using Math;
+using Array;
+using File;
+using String;
+using Application;
+
+// Data //
+bool connected = false;
+string ssh = "";
+RemoteServer server;
+string connectionError = "";
+string localDir = "";
+string remoteDir = "";
+string selectedLocal = "";
+string selectedRemote = "";
+
+// Colors//
+Color transparent = new Color(0,0,0,0);
+Color bgColor = new Color(24,24,31,255);
+Color bgColor2 = new Color(30,30,37,255);
+Color fgColor = new Color(35,35,40,255);
+Color fgColor1 = new Color(40,40,50,255);
+Color fgColor2 = new Color(50,50,60,255);
+Color fgColor3 = new Color(65,65,80,255);
+Color borderColor = new Color(100,100,130,255);
+Color textColor = new Color(210,210,230,255);
+Color red = new Color(200,100,100,255);
+Color red2 = new Color(240, 80, 80, 255);
+Color darkRed = new Color(30,25,25,255);
+Color darkRed2 = new Color(60,40,40,255);
+Color dark = new Color(18,18,23,255);
+Color green = new Color(100,200,100,255);
+Color green2 = new Color(80, 240, 80, 255);
+Color darkGreen = new Color(25,30,25,255);
+Color darkGreen2 = new Color(45,55,45,255);
+
+// UI Variables //
+MNGuiFrame frame = Surface.CreateApplicationFrame();
+MNGuiPanel panel = frame.GetPanel();
+MNGuiPanel screen = Surface.CreatePanel(panel);
+MNGuiPanel pagePanel;
+MNGuiPanel page = Surface.CreatePanel(screen);
+MNGuiPanel pageBanner;
+
+Application.CreateDesktopIcon("https://i.imgur.com/8JUF825.png");
+
+///////////////////////////
+// Application Functions //
+///////////////////////////
+
+function CheckUser(){
+    Player user = System.GetUser();
+    if(user.IsValid() == false){
+        return;
+    }
+    
+    string steamid = user.GetSteamID();
+    
+    Print("Checking user: "..steamid);
+    
+    if(steamid == "N/A"){
+        return;
+    } else if(connected == false){
+        return;
+    } else if(server.IsSteamIDAuthorized(steamid)){
+        return;
+    }
+    
+    Print("Unauthorized user '"..steamid.."'. Terminating connection.");
+    Disconnect();
+    Application.Exit();
+}
+
+function Print(string text){
+    Console.WriteLine("[MN SSH] "..text);
+}
+
+function Connect(string ip){
+    ip = String.Trim(ip);
+    
+    connectionError = "";
+    ConnectScreen();
+    
+    StringResult result = SSH.Connect(ip);
+    
+    if(result.GetResult() == false){
+        connectionError = result.GetString();
+        ConnectScreen();
+    }
+    
+    selectedLocal = "";
+    selectedRemote = "";
+}
+
+function Disconnect(){
+    Print("Disconnecting...");
+    StringResult result = SSH.Disconnect();
+    
+    if(result.GetResult()){
+        Print("Disconnected.");
+    }else{
+        Print("Error: "..result.GetString());
+    }
+    
+    connected = false;
+    ssh = "";
+    connectionError = "";
+    ConnectScreen();
+}
+
+function SetupConnection(){
+    Print("Setup connection...");
+    
+    connected = SSH.IsConnected();
+    
+    if(connected){
+        ssh = SSH.GetConnectionIP();
+        server = SSH.GetConnectedServer();
+        Print("Connection: "..ssh);
+        
+        DashboardScreen();
+    }else{
+        Print("No connection");
+        
+        ConnectScreen();
+    }
+}
+
+function SetLocalFile(string file){
+    if(selectedLocal == file){
+        selectedLocal = "";
+    }else{
+        selectedLocal = file;
+    }
+    
+    FilesPage();
+}
+
+function SetLocalFolder(string folder){
+    if(String.StartsWith(folder, "/")){
+        number lenFolder = String.Length(folder);
+        folder = String.Sub(folder, 2, lenFolder);
+    }
+
+    if(File.DirectoryExists(folder) == false){
+        return;
+    }
+    
+    selectedLocal = "";
+    localDir = folder;
+    FilesPage();
+}
+
+function SetRemoteFile(string file){
+    if(selectedRemote == file){
+        selectedRemote = "";
+    }else{
+        selectedRemote = file;
+    }
+    
+    FilesPage();
+}
+
+function SetRemoteFolder(string folder){
+    if(String.StartsWith(folder, "/")){
+        number lenFolder = String.Length(folder);
+        folder = String.Sub(folder, 2, lenFolder);
+    }
+
+    if(server.DirectoryExists(folder) == false){
+        return;
+    }
+    
+    selectedRemote = "";
+    remoteDir = folder;
+    FilesPage();
+}
+
+function<string> GoBackDir(string folder){
+    string[] splits = String.Split(folder, "/");
+    number numSplits = Array.Length(splits);
+    
+    if(numSplits <= 1){
+        return "";
+    }
+    
+    number lenFolder = String.Length(folder);
+    number lenLast = String.Length(splits[numSplits]);
+    
+    return String.Sub(folder, 1, (lenFolder - lenLast) - 1);
+}
+
+function Upload(){
+    if(selectedLocal == ""){
+        return;
+    }
+    
+    Print("Uploading: "..localDir.."/"..selectedLocal.." > "..remoteDir);
+
+    StringResult result = SSH.Upload(localDir, selectedLocal, remoteDir);
+    
+    if(result.GetResult()){
+        Print("Upload successful.");
+        FilesPage();
+    }else{
+        Print("Upload error: "..result.GetString());
+    }
+}
+
+function Download(){
+    if(selectedRemote == ""){
+        return;
+    }
+    
+    Print("Downloading: "..remoteDir.."/"..selectedRemote.." > "..localDir);
+
+    StringResult result = SSH.Download(remoteDir, selectedRemote, localDir);
+    
+    if(result.GetResult()){
+        Print("Download successful.");
+        FilesPage();
+    }else{
+        Print("Download error: "..result.GetString());
+    }
+}
+
+function DeleteRemoteFile(string folder, string file){
+    Print("Deleting remote: "..folder.."/"..file);
+    
+    StringResult result = SSH.DeleteFile(folder, file);
+    
+    if(result.GetResult()){
+        Print("Remote file deleted.");
+        FilesPage();
+    }else{
+        Print("Error: "..result.GetString());
+    }
+}
+
+function ExecRemoteFile(string folder, string file){
+    Print("Executing remote: "..folder.."/"..file);
+    
+    StringResult result = SSH.StartProcess(folder, file);
+    
+    if(result.GetResult()){
+        Print("Remote process started.");
+        FilesPage();
+    }else{
+        Print("Error: "..result.GetString());
+    }
+}
+
+function StopRemoteProcess(string pid){
+    Print("Stopping remote process: "..pid);
+    
+    bool result = SSH.StopProcess(pid);
+    
+    if(result){
+        Print("Remote process stopped.");
+        ProcessPage();
+    }else{
+        Print("Error stopping remote process");
+    }
+}
+
+function DeleteRemoteFolder(string folder){
+    Print("Deleting remote: "..folder.."/");
+    
+    StringResult result = SSH.DeleteFolder(folder);
+    
+    if(result.GetResult()){
+        Print("Remote folder deleted.");
+        FilesPage();
+    }else{
+        Print("Error: "..result.GetString());
+    }
+}
+
+function CreateRemoteFolder(string folder, string newFolder){
+    Print("Creating remote: "..folder.."/"..newFolder.."/");
+    
+    StringResult result = SSH.CreateFolder(folder, newFolder);
+    
+    if(result.GetResult()){
+        Print("Remote folder created.");
+        FilesPage();
+    }else{
+        Print("Error: "..result.GetString());
+    }
+}
+
+/////////
+// GUI //
+/////////
+
+function<MNGuiLabel> Label(MNGuiPanel parent){
+    MNGuiLabel label = Surface.CreateLabel(parent);
+    label.SetFont("code_pro");
+    label.SetTextColor(textColor);
+    
+    return label;
+}
+
+function<MNGuiButton> Button(MNGuiPanel parent){
+    MNGuiButton button = Surface.CreateButton(parent);
+    button.SetFont("code_pro");
+    button.SetBackgroundColor(fgColor2);
+    button.SetHoverColor(bgColor2);
+    button.SetTextColor(textColor);
+    button.SetFontSize(18);
+    button.SetHeight(20);
+    
+    return button;
+}
+
+function<MNGuiInputButton> InputButton(MNGuiPanel parent){
+    MNGuiInputButton button = Surface.CreateInputButton(parent);
+    button.SetFont("code_pro");
+    button.SetBackgroundColor(fgColor2);
+    button.SetHoverColor(bgColor2);
+    button.SetTextColor(textColor);
+    button.SetFontSize(18);
+    button.SetHeight(20);
+    
+    return button;
+}
+
+function CloseScreen(){
+    screen.Remove();
+    
+    screen = Surface.CreatePanel(panel);
+    screen.DockFill();
+    screen.SetBackgroundColor(transparent);
+}
+
+function CreateBanner(MNGuiPanel parent, string titleText) {
+    MNGuiPanel bannerBG = Surface.CreatePanel(parent);
+    bannerBG.DockTop();
+    bannerBG.SetDockMargin(5, 5, 5, 0);
+    bannerBG.SetHeight(24);
+    bannerBG.SetBackgroundColor(borderColor);
+    
+    pageBanner = Surface.CreatePanel(bannerBG);
+    pageBanner.DockFill();
+    pageBanner.SetDockMargin(1, 1, 1, 1);
+    pageBanner.SetBackgroundColor(bgColor2);
+    
+    MNGuiLabel title = Label(pageBanner);
+    title.DockFill();
+    title.SetDockMargin(3, 3, 3, 3);
+    title.SetText(titleText);
+    title.SetFontSize(15);
+    title.TextAlignCenter();
+}
+
+// Connect Screen //
+
+function AdminScreen(){
+    CloseScreen();
+    
+    MNGuiPanel bg = Surface.CreatePanel(screen);
+    bg.SetScalePos(0.5, 0.5);
+    bg.SetSize(200, 70);
+    bg.SetPos(0-100,0-35);
+    bg.SetBackgroundColor(borderColor);
+    
+    MNGuiPanel pnl = Surface.CreatePanel(bg);
+    pnl.DockFill();
+    pnl.SetDockMargin(1, 1, 1, 1);
+    pnl.SetBackgroundColor(bgColor);
+    
+    MNGuiPanel banner = Surface.CreatePanel(pnl);
+    banner.DockTop();
+    banner.SetDockMargin(5, 5, 5, 0);
+    banner.SetHeight(20);
+    banner.SetBackgroundColor(fgColor);
+    
+    MNGuiLabel title = Label(banner);
+    title.DockFill();
+    title.SetText("Admin Privilege");
+    title.SetFontSize(20);
+    title.TextAlignCenter();
+    
+    MNGuiPanel inputBG = Surface.CreatePanel(pnl);
+    inputBG.DockFill();
+    inputBG.SetDockMargin(5, 5, 5, 5);
+    inputBG.SetBackgroundColor(borderColor);
+    
+    MNGuiButton connect = Surface.CreateButton(inputBG);
+    connect.DockFill();
+    connect.SetDockMargin(1, 1, 1, 1);
+    connect.SetFont("code_pro");
+    connect.SetFontSize(18);
+    connect.SetText("Grant Admin Privilege");
+    connect.SetTextColor(textColor);
+    connect.SetBackgroundColor(bgColor);
+    connect.SetHoverColor(fgColor2);
+    connect.SetTag("AdminPrivilege");
+    
+    Surface.Update();
+}
+
+function ConnectScreen(){
+    CloseScreen();
+    
+    MNGuiPanel bg = Surface.CreatePanel(screen);
+    bg.SetScalePos(0.5, 0.5);
+    bg.SetSize(200, 70);
+    bg.SetPos(0-100,0-35);
+    bg.SetBackgroundColor(borderColor);
+    
+    MNGuiPanel pnl = Surface.CreatePanel(bg);
+    pnl.DockFill();
+    pnl.SetDockMargin(1, 1, 1, 1);
+    pnl.SetBackgroundColor(bgColor);
+    
+    MNGuiPanel banner = Surface.CreatePanel(pnl);
+    banner.DockTop();
+    banner.SetDockMargin(5, 5, 5, 0);
+    banner.SetHeight(20);
+    banner.SetBackgroundColor(fgColor);
+    
+    MNGuiLabel title = Label(banner);
+    title.DockFill();
+    title.SetText("SSH Connect");
+    title.SetFontSize(20);
+    title.TextAlignCenter();
+    
+    MNGuiPanel inputBG = Surface.CreatePanel(pnl);
+    inputBG.DockFill();
+    inputBG.SetDockMargin(5, 5, 5, 5);
+    inputBG.SetBackgroundColor(borderColor);
+    
+    MNGuiInputButton connect = Surface.CreateInputButton(inputBG);
+    connect.DockFill();
+    connect.SetDockMargin(1, 1, 1, 1);
+    connect.SetFont("code_pro");
+    connect.SetFontSize(18);
+    connect.SetText("Connect to IP");
+    connect.SetTitle("Enter IP");
+    connect.SetTextColor(textColor);
+    connect.SetBackgroundColor(bgColor);
+    connect.SetHoverColor(fgColor2);
+    connect.SetTag("Connect");
+    
+    if(connectionError != ""){
+        MNGuiLabel error = Label(screen);
+        error.DockBottom();
+        error.SetDockMargin(0, 0, 0, 40);
+        error.SetText("Error: "..connectionError);
+        error.SetFontSize(20);
+        error.SetTextColor(red);
+        error.TextAlignCenter();
+    }
+    
+    Surface.Update();
+}
+
+
+// Dashboard //
+
+function DashboardScreen(){
+    CloseScreen();
+    
+    MNGuiPanel top = Surface.CreatePanel(screen);
+    top.DockTop();
+    top.SetDockMargin(5, 5, 5, 0);
+    top.SetHeight(20);
+    top.SetBackgroundColor(borderColor);
+    
+    MNGuiPanel topFill = Surface.CreatePanel(top);
+    topFill.DockFill();
+    topFill.SetDockMargin(1, 1, 1, 1);
+    topFill.SetBackgroundColor(bgColor);
+    
+    MNGuiLabel title = Label(topFill);
+    title.DockFill();
+    title.SetDockMargin(2, 1, 2, 2);
+    title.SetText("Connection - "..ssh);
+    title.SetFontSize(15);
+    
+    MNGuiPanel left = Surface.CreatePanel(screen);
+    left.DockLeft();
+    left.SetDockMargin(5, 5, 0, 5);
+    left.SetWidth(120);
+    left.SetBackgroundColor(borderColor);
+    
+    MNGuiPanel leftFill = Surface.CreatePanel(left);
+    leftFill.DockFill();
+    leftFill.SetDockMargin(1, 1, 1, 1);
+    leftFill.SetBackgroundColor(bgColor);
+    
+    MNGuiButton infoButton = Button(leftFill);
+    infoButton.DockTop();
+    infoButton.SetDockMargin(5, 5, 5, 0);
+    infoButton.SetText("Server Info");
+    infoButton.SetTag("StatsPage");
+    
+    MNGuiButton ftpButton = Button(leftFill);
+    ftpButton.DockTop();
+    ftpButton.SetDockMargin(5, 5, 5, 0);
+    ftpButton.SetText("Remote Files");
+    ftpButton.SetTag("FilesPage");
+    
+    MNGuiButton processButton = Button(leftFill);
+    processButton.DockTop();
+    processButton.SetDockMargin(5, 5, 5, 0);
+    processButton.SetText("Processes");
+    processButton.SetTag("ProcessPage");
+
+    MNGuiButton secretsButton = Button(leftFill);
+    secretsButton.DockTop();
+    secretsButton.SetDockMargin(5, 5, 5, 0);
+    secretsButton.SetText("Secrets");
+    secretsButton.SetTag("SecretsPage");
+    
+    MNGuiButton disconnectButton = Button(leftFill);
+    disconnectButton.DockBottom();
+    disconnectButton.SetDockMargin(5, 5, 5, 5);
+    disconnectButton.SetText("Disconnect");
+    disconnectButton.SetTag("Disconnect");
+    disconnectButton.SetBackgroundColor(darkRed2);
+    disconnectButton.SetHoverColor(darkRed);
+    disconnectButton.SetTextColor(red);
+    
+    MNGuiPanel pageFill = Surface.CreatePanel(screen);
+    pageFill.DockFill();
+    pageFill.SetDockMargin(5, 5, 5, 5);
+    pageFill.SetBackgroundColor(borderColor);
+    
+    pagePanel = Surface.CreatePanel(pageFill);
+    pagePanel.DockFill();
+    pagePanel.SetDockMargin(1, 1, 1, 1);
+    pagePanel.SetBackgroundColor(bgColor);
+    
+    StatsPage();
+    
+    Surface.Update();
+}
+
+function ClosePage(string titleText){
+    page.Remove();
+    
+    page = Surface.CreatePanel(pagePanel);
+    page.DockFill();
+    page.SetBackgroundColor(transparent);
+    
+    CreateBanner(page, titleText);
+}
+
+function StatsPage(){
+    ClosePage("Server Info");
+    
+    MNGuiPanel diskBG = Surface.CreatePanel(page);
+    diskBG.DockLeft();
+    diskBG.SetDockMargin(5, 5, 0, 5);
+    diskBG.SetWidth(160);
+    diskBG.SetBackgroundColor(borderColor);
+    
+    MNGuiPanel disk = Surface.CreatePanel(diskBG);
+    disk.DockFill();
+    disk.SetDockMargin(1, 1, 1, 1);
+    disk.SetBackgroundColor(bgColor2);
+    
+    MNGuiLabel diskTitle = Label(disk);
+    diskTitle.DockTop();
+    diskTitle.SetDockMargin(5, 5, 5, 0);
+    diskTitle.SetHeight(15);
+    diskTitle.SetText("Remote Disk");
+    diskTitle.TextAlignCenter();
+    
+    MNGuiPanel diskUsage = Surface.CreatePanel(disk);
+    diskUsage.DockFill();
+    diskUsage.SetDockMargin(5, 5, 5, 5);
+    diskUsage.SetBackgroundColor(dark);
+    
+    number capacity = Math.RoundTo(server.GetDiskCapacity() / 1000, 2);
+    number usedCapacity = Math.RoundTo(server.GetUsedCapacity() / 1000, 2);
+    number percentage = Math.RoundTo((usedCapacity / capacity) * 100, 2);
+    
+    Color diskColor;
+    if(percentage >= 80){
+        diskColor = red;
+    }else{
+        diskColor = green;
+    }
+    
+    number p = percentage * 0.01;
+    
+    MNGuiPanel diskUsageBar = Surface.CreatePanel(diskUsage);
+    diskUsageBar.SetBackgroundColor(diskColor);
+    diskUsageBar.SetScalePos(0, 1-p);
+    diskUsageBar.SetScaleSize(1, p);
+    
+    MNGuiLabel diskInfo = Label(diskUsage);
+    diskInfo.DockFill();
+    diskInfo.SetText(percentage.."%\n\nUsed: "..usedCapacity.." Kb\nCapacity: "..capacity.." Kb");
+    diskInfo.TextAlignCenter();
+    
+    MNGuiPanel right = Surface.CreatePanel(page);
+    right.DockFill();
+    right.SetBackgroundColor(transparent);
+    
+    MNGuiPanel nameBG = Surface.CreatePanel(right);
+    nameBG.DockTop();
+    nameBG.SetDockMargin(5, 5, 5, 0);
+    nameBG.SetHeight(20);
+    nameBG.SetBackgroundColor(borderColor);
+    
+    MNGuiPanel namePanel = Surface.CreatePanel(nameBG);
+    namePanel.DockFill();
+    namePanel.SetDockMargin(1, 1, 1, 1);
+    namePanel.SetBackgroundColor(bgColor2);
+    
+    MNGuiLabel nameLabel = Label(namePanel);
+    nameLabel.DockFill();
+    nameLabel.SetDockMargin(3 ,3, 3, 3);
+    nameLabel.SetText("Server Name: "..server.GetName());
+    
+    MNGuiPanel clockBG = Surface.CreatePanel(right);
+    clockBG.DockTop();
+    clockBG.SetDockMargin(5, 5, 5, 0);
+    clockBG.SetHeight(20);
+    clockBG.SetBackgroundColor(borderColor);
+    
+    MNGuiPanel clockPanel = Surface.CreatePanel(clockBG);
+    clockPanel.DockFill();
+    clockPanel.SetDockMargin(1, 1, 1, 1);
+    clockPanel.SetBackgroundColor(bgColor2);
+    
+    MNGuiLabel clockLabel = Label(clockPanel);
+    clockLabel.DockFill();
+    clockLabel.SetDockMargin(3, 3, 3, 3);
+    clockLabel.SetText("Clock Speed: "..server.GetClockSpeed());
+    
+    MNGuiPanel memoryBG = Surface.CreatePanel(right);
+    memoryBG.DockTop();
+    memoryBG.SetDockMargin(5, 5, 5, 0);
+    memoryBG.SetHeight(20);
+    memoryBG.SetBackgroundColor(borderColor);
+    
+    MNGuiPanel memoryPanel = Surface.CreatePanel(memoryBG);
+    memoryPanel.DockFill();
+    memoryPanel.SetDockMargin(1, 1, 1, 1);
+    memoryPanel.SetBackgroundColor(bgColor2);
+    
+    MNGuiLabel memoryLabel = Label(memoryPanel);
+    memoryLabel.DockFill();
+    memoryLabel.SetDockMargin(3, 3, 3, 3);
+    memoryLabel.SetText("Memory: "..server.GetMemory());
+    
+    MNGuiPanel ipBG = Surface.CreatePanel(right);
+    ipBG.DockTop();
+    ipBG.SetDockMargin(5, 5, 5, 0);
+    ipBG.SetScaleSize(1, 0.25);
+    ipBG.SetBackgroundColor(borderColor);
+    
+    MNGuiPanel ipPanel = Surface.CreatePanel(ipBG);
+    ipPanel.DockFill();
+    ipPanel.SetDockMargin(1, 1, 1, 1);
+    ipPanel.SetBackgroundColor(bgColor2);
+    
+    string[] ips = server.GetIPs();
+    number numIPs = Array.Length(ips);
+    
+    MNGuiLabel ipTitle = Label(ipPanel);
+    ipTitle.DockTop();
+    ipTitle.SetDockMargin(5, 5, 5, 0);
+    ipTitle.SetHeight(15);
+    ipTitle.SetText("Server IPs: "..numIPs);
+    ipTitle.TextAlignCenter();
+
+    number i = 1;
+    while(i <= numIPs){
+        MNGuiPanel ip = Surface.CreatePanel(ipPanel);
+        ip.DockTop();
+        ip.SetDockMargin(5, 5, 5, 0);
+        ip.SetHeight(19);
+        ip.SetBackgroundColor(bgColor);
+        
+        MNGuiLabel ipLabel = Label(ip);
+        ipLabel.DockFill();
+        ipLabel.SetDockMargin(3, 3, 3, 3);
+        ipLabel.SetText(ips[i]);
+        
+        i = i + 1;
+    }
+    
+    MNGuiPanel clientsBG = Surface.CreatePanel(right);
+    clientsBG.DockFill();
+    clientsBG.SetDockMargin(5, 5, 5, 5);
+    clientsBG.SetBackgroundColor(borderColor);
+    
+    MNGuiPanel clientsPanel = Surface.CreatePanel(clientsBG);
+    clientsPanel.DockFill();
+    clientsPanel.SetDockMargin(1, 1, 1, 1);
+    clientsPanel.SetBackgroundColor(bgColor2);
+    
+    string[] clients = server.GetConnectedIPs();
+    number numClients = Array.Length(clients);
+    
+    MNGuiLabel clientsTitle = Label(clientsPanel);
+    clientsTitle.DockTop();
+    clientsTitle.SetDockMargin(5, 5, 5, 0);
+    clientsTitle.SetHeight(15);
+    clientsTitle.SetText("Connected Clients: "..numClients);
+    clientsTitle.TextAlignCenter();
+
+    number cl = 1;
+    while(cl <= numClients){
+        MNGuiPanel client = Surface.CreatePanel(clientsPanel);
+        client.DockTop();
+        client.SetDockMargin(5, 5, 5, 0);
+        client.SetHeight(19);
+        client.SetBackgroundColor(bgColor);
+        
+        MNGuiLabel clientLabel = Label(client);
+        clientLabel.DockFill();
+        clientLabel.SetDockMargin(3, 3, 3, 3);
+        clientLabel.SetText(clients[cl]);
+        
+        cl = cl + 1;
+    }
+    
+    Surface.Update();
+}
+
+function FilesPage(){
+    ClosePage("Remote Files");
+
+    MNGuiButton refresh = Button(pageBanner);
+    refresh.DockRight();
+    refresh.SetWidth(18);
+    refresh.SetDockMargin(2, 2, 2, 2);
+    refresh.SetText("⭮");
+    refresh.SetTag("FilesPage");
+    
+    string[] lFiles = File.FindFiles(localDir);
+    string[] lFolders = File.FindFolders(localDir);
+    string[] rFiles = server.FindFiles(remoteDir);
+    string[] rFolders = server.FindFolders(remoteDir);
+    
+    // LOCAL FOLDERS
+    MNGuiPanel localBG = Surface.CreatePanel(page);
+    localBG.DockLeft();
+    localBG.SetDockMargin(5, 5, 0, 5);
+    localBG.SetScaleSize(0.45, 1);
+    localBG.SetBackgroundColor(borderColor);
+    
+    MNGuiPanel local = Surface.CreatePanel(localBG);
+    local.DockFill();
+    local.SetDockMargin(1, 1, 1, 1);
+    local.SetBackgroundColor(bgColor2);
+
+    MNGuiLabel localDirLabel = Label(local);
+    localDirLabel.DockTop();
+    localDirLabel.SetDockMargin(0, 2, 0, 0);
+    localDirLabel.SetHeight(13);
+    localDirLabel.SetFontSize(14);
+    localDirLabel.SetText(" "..localDir.."/");
+    
+    MNGuiButton lBack = Button(local);
+    lBack.DockTop();
+    lBack.SetDockMargin(3, 3, 3, 0);
+    lBack.SetHeight(14);
+    lBack.SetText(" ../");
+    lBack.SetTag("LFOLDER_BACK");
+    lBack.SetData(localDir);
+    lBack.SetFontSize(13);
+    lBack.TextAlignLeft();
+    lBack.SetBackgroundColor(fgColor2);
+    lBack.SetHoverColor(fgColor3);
+        
+    number numlFolders = Array.Length(lFolders);
+    number lFolder = 1;
+    while(lFolder <= numlFolders){
+        MNGuiButton folder = Button(local);
+        folder.DockTop();
+        folder.SetDockMargin(3, 3, 3, 0);
+        folder.SetHeight(14);
+        folder.SetText(" "..lFolders[lFolder].."/");
+        folder.SetTag("LFOLDER");
+        folder.SetData(localDir.."/"..lFolders[lFolder]);
+        folder.SetFontSize(13);
+        folder.TextAlignLeft();
+        folder.SetBackgroundColor(fgColor2);
+        folder.SetHoverColor(fgColor3);
+        
+        lFolder = lFolder + 1;
+    }
+    
+    number numlFiles = Array.Length(lFiles);
+    number lFile = 1;
+    while(lFile <= numlFiles){
+        string fileName = lFiles[lFile];
+        
+        Color color1;
+        Color color2;
+        
+        if(fileName == selectedLocal){
+            color1 = fgColor3;
+            color2 = borderColor;
+        }else{
+            color1 = fgColor1;
+            color2 = fgColor2;
+        }
+        
+        MNGuiButton file = Button(local);
+        file.DockTop();
+        file.SetDockMargin(3, 3, 3, 0);
+        file.SetHeight(14);
+        file.SetText(" "..fileName);
+        file.SetTag("LFILE");
+        file.SetData(fileName);
+        file.SetFontSize(13);
+        file.TextAlignLeft();
+        file.SetBackgroundColor(color1);
+        file.SetHoverColor(color2);
+        
+        lFile = lFile + 1;
+    }
+    
+    // TRANSFER
+    MNGuiPanel transfer = Surface.CreatePanel(page);
+    transfer.DockFill();
+    transfer.SetDockMargin(5, 5, 5, 5);
+    transfer.SetBackgroundColor(bgColor2);
+    
+    MNGuiButton upload = Button(transfer);
+    upload.DockTop();
+    upload.SetDockMargin(0, 3, 0, 0);
+    upload.SetHeight(20);
+    upload.SetText(">");
+    upload.SetTag("Upload");
+    
+    MNGuiButton download = Button(transfer);
+    download.DockTop();
+    download.SetDockMargin(0, 3, 0, 0);
+    download.SetHeight(20);
+    download.SetText("<");
+    download.SetTag("Download");
+    
+    MNGuiInputButton createRemoteFolder = InputButton(transfer);
+    createRemoteFolder.DockTop();
+    createRemoteFolder.SetDockMargin(0, 3, 0, 0);
+    createRemoteFolder.SetHeight(20);
+    createRemoteFolder.SetText("+");
+    createRemoteFolder.SetTag("CreateRemoteFolder");
+    createRemoteFolder.SetTitle("New Folder Name...");
+    
+    // REMOTE FOLDERS
+    MNGuiPanel remoteBG = Surface.CreatePanel(page);
+    remoteBG.DockRight();
+    remoteBG.SetDockMargin(0, 5, 5, 5);
+    remoteBG.SetScaleSize(0.45, 1);
+    remoteBG.SetBackgroundColor(borderColor);
+    
+    MNGuiPanel remote = Surface.CreatePanel(remoteBG);
+    remote.DockFill();
+    remote.SetDockMargin(1, 1, 1, 1);
+    remote.SetBackgroundColor(bgColor2);
+    
+    MNGuiLabel remoteDirLabel = Label(remote);
+    remoteDirLabel.DockTop();
+    remoteDirLabel.SetDockMargin(0, 2, 0, 0);
+    remoteDirLabel.SetHeight(13);
+    remoteDirLabel.SetFontSize(14);
+    remoteDirLabel.SetText(" "..remoteDir.."/");
+    
+    MNGuiButton rBack = Button(remote);
+    rBack.DockTop();
+    rBack.SetDockMargin(3, 3, 3, 0);
+    rBack.SetHeight(14);
+    rBack.SetText(" ../");
+    rBack.SetTag("RFOLDER_BACK");
+    rBack.SetData(remoteDir);
+    rBack.SetFontSize(13);
+    rBack.TextAlignLeft();
+    rBack.SetBackgroundColor(fgColor2);
+    rBack.SetHoverColor(fgColor3);
+        
+    number numrFolders = Array.Length(rFolders);
+    number rFolder = 1;
+    while(rFolder <= numrFolders){
+        string folderName = rFolders[rFolder];
+        
+        MNGuiPanel folderPnl = Surface.CreatePanel(remote);
+        folderPnl.DockTop();
+        folderPnl.SetDockMargin(3, 3, 3, 0);
+        folderPnl.SetHeight(14);
+        folderPnl.SetBackgroundColor(transparent);
+        
+        MNGuiButton folder = Button(folderPnl);
+        folder.DockFill();
+        folder.SetText(" "..folderName.."/");
+        folder.SetTag("RFOLDER");
+        folder.SetData(remoteDir.."/"..folderName);
+        folder.SetFontSize(13);
+        folder.TextAlignLeft();
+        folder.SetBackgroundColor(fgColor2);
+        folder.SetHoverColor(fgColor3);
+        
+        MNGuiButton delete = Button(folderPnl);
+        delete.DockRight();
+        delete.SetWidth(14);
+        delete.SetText("X");
+        delete.SetBackgroundColor(darkRed);
+        delete.SetHoverColor(darkRed2);
+        delete.SetTextColor(red);
+        delete.SetTag("DeleteRemoteFolder");
+        delete.SetData(folderName);
+        
+        rFolder = rFolder + 1;
+    }
+    
+    number numrFiles = Array.Length(rFiles);
+    number rFile = 1;
+    while(rFile <= numrFiles){
+        string fileName = rFiles[rFile];
+        number fileSize = server.FileSize(remoteDir, fileName);
+        string fileSizeString = Util.ToString(Math.RoundTo(fileSize / 1000, 1).." Kb");
+        
+        Color color1;
+        Color color2;
+        
+        if(fileName == selectedRemote){
+            color1 = fgColor3;
+            color2 = borderColor;
+        }else{
+            color1 = fgColor1;
+            color2 = fgColor2;
+        }
+        
+        MNGuiPanel filePnl = Surface.CreatePanel(remote);
+        filePnl.DockTop();
+        filePnl.SetDockMargin(3, 3, 3, 0);
+        filePnl.SetHeight(14);
+        filePnl.SetBackgroundColor(transparent);
+        
+        MNGuiButton file = Button(filePnl);
+        file.DockFill();
+        file.SetText(" "..fileName.."      ["..fileSizeString.."]");
+        file.SetTag("RFILE");
+        file.SetData(fileName);
+        file.SetFontSize(13);
+        file.TextAlignLeft();
+        file.SetBackgroundColor(color1);
+        file.SetHoverColor(color2);
+        
+        MNGuiButton delete = Button(filePnl);
+        delete.DockRight();
+        delete.SetWidth(14);
+        delete.SetText("X");
+        delete.SetBackgroundColor(darkRed);
+        delete.SetHoverColor(darkRed2);
+        delete.SetTextColor(red);
+        delete.SetTag("DeleteRemoteFile");
+        delete.SetData(fileName);
+        
+        string[] splits = String.Split(fileName, ".");
+        number numSplits = Array.Length(splits);
+        string extension = splits[numSplits];
+        
+        if(extension == "mscx"){
+            MNGuiButton exec = Button(filePnl);
+            exec.DockRight();
+            exec.SetWidth(14);
+            exec.SetText("‣");
+            exec.SetBackgroundColor(darkGreen);
+            exec.SetHoverColor(darkGreen2);
+            exec.SetTextColor(green);
+            exec.SetTag("ExecRemoteFile");
+            exec.SetData(fileName);
+        }
+        
+        rFile = rFile + 1;
+    }
+    
+    Surface.Update();
+}
+
+function ProcessPage(){
+    MNGuiButton refresh = Button(pageBanner);
+    refresh.DockRight();
+    refresh.SetWidth(18);
+    refresh.SetDockMargin(2, 2, 2, 2);
+    refresh.SetText("⭮");
+    refresh.SetTag("ProcessPage");
+    
+    Process[] processes = SSH.GetRunningProcesses();
+    number numProcesses = Array.Length(processes);
+    
+    ClosePage("Processes ( "..numProcesses.." )");
+    
+    MNGuiPanel processBG = Surface.CreatePanel(page);
+    processBG.DockFill();
+    processBG.SetDockMargin(5, 5, 5, 5);
+    processBG.SetWidth(160);
+    processBG.SetBackgroundColor(borderColor);
+    
+    MNGuiPanel processPanel = Surface.CreatePanel(processBG);
+    processPanel.DockFill();
+    processPanel.SetDockMargin(1, 1, 1, 1);
+    processPanel.SetBackgroundColor(bgColor2);
+    
+    number i = 1;
+    while(i <= numProcesses){
+        Process process = processes[i];
+        string name = Util.ToString(process.GetProcessId());
+        
+        MNGuiPanel pPanel = Surface.CreatePanel(processPanel);
+        pPanel.DockTop();
+        pPanel.SetDockMargin(5, 5, 5, 0);
+        pPanel.SetHeight(20);
+        pPanel.SetBackgroundColor(fgColor2);
+        
+        number runtime = SSH.ProcessRuntime(name);
+        string date = Util.Date(runtime, "%H:%M:%S");
+        
+        MNGuiLabel label = Label(pPanel);
+        label.DockFill();
+        label.SetDockMargin(3, 3, 3, 3);
+        label.SetText(name.." - "..date);
+        
+        MNGuiButton stop = Button(pPanel);
+        stop.DockRight();
+        stop.SetDockMargin(2, 2, 2, 2);
+        stop.SetText("STOP");
+        stop.SetFontSize(13);
+        stop.SetBackgroundColor(darkRed);
+        stop.SetHoverColor(darkRed2);
+        stop.SetTextColor(red);
+        stop.SetTag("StopRemoteProcess");
+        stop.SetData(name);
+        
+        i = i + 1;
+    }
+    
+    Surface.Update();
+}
+
+MNGuiInputButton secretNameInputButton;
+MNGuiInputButton secretValueInputButton;
+MNGuiButton confirmCreateSecretButton;
+string secretValueString = "";
+string secretNameString = "";
+
+function SetCreateSecretNameInputText(string value) {
+    secretNameInputButton.SetText(value);
+    secretNameString = value;
+    
+    UpdateCreateSecretButtons();
+    Surface.Update();
+}
+
+function SetCreateSecretValueInputText(string value) {
+    secretValueInputButton.SetText("*******************");
+    secretValueString = value;
+    
+    UpdateCreateSecretButtons();
+    Surface.Update();
+}
+
+function<bool> IsCreateSecretButtonReady() {
+    return secretNameString != "" && secretValueString != "";
+}
+
+function UpdateCreateSecretButtons() {
+    if (IsCreateSecretButtonReady()) {
+        confirmCreateSecretButton.SetHoverColor(green2);
+        confirmCreateSecretButton.SetBackgroundColor(green);
+    }
+}
+
+function CreateSecretSubPage() {
+
+    secretNameString = "";
+    secretValueString = "";
+        
+    MNGuiPanel createSecretPanel = Surface.CreatePanel(page);
+    createSecretPanel.SetScalePos(0.5, 0.5);
+    createSecretPanel.SetSize(200, 110);
+    createSecretPanel.SetPos(-100, -50);
+    createSecretPanel.SetBackgroundColor(borderColor);
+    createSecretPanel.SetDockMargin(5, 5, 5, 5);
+    
+    MNGuiPanel subPage = Surface.CreatePanel(createSecretPanel);
+    subPage.DockFill();
+    subPage.SetDockMargin(1, 1, 1, 1);
+    subPage.SetBackgroundColor(bgColor2);
+    
+    CreateBanner(subPage, "Create Secret");
+    
+    secretNameInputButton = InputButton(subPage);
+    secretNameInputButton.DockTop();
+    secretNameInputButton.SetText("new-secret-name");
+    secretNameInputButton.SetDockMargin(5, 5, 5, 0);
+    secretNameInputButton.SetTag("CreateSecret_SetName");
+
+    secretValueInputButton = InputButton(subPage);
+    secretValueInputButton.DockTop();
+    secretValueInputButton.SetText("Secret Value");
+    secretValueInputButton.SetDockMargin(5, 5, 5, 0);
+    secretValueInputButton.SetTag("CreateSecret_SetValue");
+    
+    confirmCreateSecretButton = Button(subPage);
+    confirmCreateSecretButton.SetWidth(90);
+    confirmCreateSecretButton.SetHeight(20);
+    confirmCreateSecretButton.SetPos(5, 85);
+    confirmCreateSecretButton.SetTag("CreateSecret_Create");
+    confirmCreateSecretButton.SetText("Create");
+    confirmCreateSecretButton.SetBackgroundColor(darkRed);
+    confirmCreateSecretButton.SetHoverColor(darkRed2);
+    
+    MNGuiButton cancelCreateSecret = Button(subPage);
+    cancelCreateSecret.SetWidth(90);
+    cancelCreateSecret.SetHeight(20);
+    cancelCreateSecret.SetPos(105, 85);
+    cancelCreateSecret.SetTag("SecretsPage");
+    cancelCreateSecret.SetText("Cancel");
+    cancelCreateSecret.SetBackgroundColor(red);
+    cancelCreateSecret.SetHoverColor(red2);
+    
+    Surface.Update();
+}
+
+function SecretsPage() {
+    
+    string[] secrets = SSH.GetSecrets();
+    number numSecrets = Array.Length(secrets);
+    
+    ClosePage("Server Secrets");
+    
+    MNGuiButton refresh = Button(pageBanner);
+    refresh.DockRight();
+    refresh.SetWidth(18);
+    refresh.SetDockMargin(2, 2, 2, 2);
+    refresh.SetText("⭮");
+    refresh.SetTag("SecretsPage");
+    
+    MNGuiPanel processBG = Surface.CreatePanel(page);
+    processBG.DockFill();
+    processBG.SetDockMargin(5, 5, 5, 5);
+    processBG.SetWidth(160);
+    processBG.SetBackgroundColor(borderColor);
+    
+    MNGuiPanel processPanel = Surface.CreatePanel(processBG);
+    processPanel.DockFill();
+    processPanel.SetDockMargin(1, 1, 1, 1);
+    processPanel.SetBackgroundColor(bgColor2);
+    
+    number i = 1;
+    while(i <= numSecrets){
+        string secretName = secrets[i];
+        
+        MNGuiPanel pPanel = Surface.CreatePanel(processPanel);
+        pPanel.DockTop();
+        pPanel.SetDockMargin(5, 5, 5, 0);
+        pPanel.SetHeight(20);
+        pPanel.SetBackgroundColor(fgColor2);
+        
+        MNGuiLabel label = Label(pPanel);
+        label.DockFill();
+        label.SetDockMargin(3, 3, 3, 3);
+        label.SetText(secretName);
+        
+        MNGuiButton delete = Button(pPanel);
+        delete.DockRight();
+        delete.SetDockMargin(2, 2, 2, 2);
+        delete.SetText("DELETE");
+        delete.SetFontSize(13);
+        delete.SetBackgroundColor(darkRed);
+        delete.SetHoverColor(darkRed2);
+        delete.SetTextColor(red);
+        delete.SetTag("DeleteSecret");
+        delete.SetData(secretName);
+        
+        MNGuiInputButton updateValue = InputButton(pPanel);
+        updateValue.DockRight();
+        updateValue.SetDockMargin(2, 2, 2, 2);
+        updateValue.SetText("Set Value");
+        updateValue.SetFontSize(13);
+        updateValue.SetBackgroundColor(darkGreen);
+        updateValue.SetHoverColor(darkGreen2);
+        updateValue.SetTextColor(green);
+        updateValue.SetTag("SetSecret");
+        updateValue.SetData(secretName);
+        
+        i = i + 1;
+    }
+    
+    MNGuiButton addNewSecret = Button(processPanel);
+    addNewSecret.DockTop();
+    addNewSecret.SetHeight(20);
+    addNewSecret.SetDockMargin(5, 5, 5, 0);
+    addNewSecret.SetBackgroundColor(fgColor2);
+    addNewSecret.SetHoverColor(fgColor1);
+    addNewSecret.SetFont("code_pro");
+    addNewSecret.SetText("Add New Secret");
+    addNewSecret.SetTag("CreateNewSecret");
+    addNewSecret.SetTextColor(textColor);
+    
+    Surface.Update();
+}
+
+////////////
+// Events //
+////////////
+
+function InputButtonPressed(MNGuiInputButton button, Player ply, string text){
+    string tag = button.GetTag();
+
+    if(tag == "Connect"){
+        Connect(text);
+        return;
+    }
+    
+    if(tag == "CreateRemoteFolder"){
+        CreateRemoteFolder(remoteDir, text);
+        return;
+    }
+    
+    if (tag == "CreateSecret_SetName") {
+        SetCreateSecretNameInputText(text);
+        return;
+    }
+    
+    if (tag == "CreateSecret_SetValue") {
+        SetCreateSecretValueInputText(text);
+        return;
+    } 
+    
+    if (tag == "SetSecret") {
+        SSH.AddSecret(button.GetData(), text);
+        SecretsPage();
+        return;
+    }
+}
+
+Event.AddListener("Surface_InputButtonPressed", "inpb", "InputButtonPressed");
+
+function ButtonPressed(MNGuiButton button, Player ply){
+    string tag = button.GetTag();
+
+    if(tag == "LFOLDER"){
+        SetLocalFolder(button.GetData());
+        return;
+    }
+    if(tag == "LFILE"){
+        SetLocalFile(button.GetData());
+        return;
+    }
+    if(tag == "LFOLDER_BACK"){
+        string newDir = GoBackDir(button.GetData());
+        SetLocalFolder(newDir);
+        return;
+    }
+    
+    if(tag == "RFOLDER"){
+        SetRemoteFolder(button.GetData());
+        return;
+    }
+    if(tag == "RFILE"){
+        SetRemoteFile(button.GetData());
+        return;
+    }
+    if(tag == "RFOLDER_BACK"){
+        string newDir = GoBackDir(button.GetData());
+        SetRemoteFolder(newDir);
+        return;
+    }
+    
+    if(tag == "StatsPage"){
+        StatsPage();
+        return;
+    }
+    if(tag == "FilesPage"){
+        FilesPage();
+        return;
+    }
+    if(tag == "ProcessPage"){
+        ProcessPage();
+        return;
+    }
+    if (tag == "SecretsPage") {
+        SecretsPage();
+        return;        
+    }
+    
+    if (tag == "CreateNewSecret") {
+        CreateSecretSubPage();
+        return;
+    }
+    
+    if (tag == "CreateSecret_Create") {
+        if (IsCreateSecretButtonReady()) {
+            SSH.AddSecret(secretNameString, secretValueString);
+            SecretsPage();
+        }
+        
+        return;
+    }
+    
+    if (tag == "DeleteSecret") {
+        SSH.RemoveSecret(button.GetData());
+        SecretsPage();
+        return;
+    }
+    
+    if(tag == "Disconnect"){
+        Disconnect();
+        return;
+    }
+    
+    if(tag == "Upload"){
+        Upload();
+        return;
+    }
+    if(tag == "Download"){
+        Download();
+        return;
+    }
+    
+    if(tag == "DeleteRemoteFile"){
+        DeleteRemoteFile(remoteDir, button.GetData());
+        return;
+    }
+    if(tag == "ExecRemoteFile"){
+        ExecRemoteFile(remoteDir, button.GetData());
+        return;
+    }
+    if(tag == "StopRemoteProcess"){
+        StopRemoteProcess(button.GetData());
+        return;
+    }
+    if(tag == "DeleteRemoteFolder"){
+        DeleteRemoteFolder(remoteDir.."/"..button.GetData());
+        return;
+    }
+    
+    if(tag == "AdminPrivilege"){
+        Initialize();
+        return;
+    }
+}
+Event.AddListener("Surface_ButtonPressed", "btn", "ButtonPressed");
+
+function IncomingNTM(number protocol, NTM ntm){
+    Print("NTM "..protocol);
+    
+    if(protocol == 231){
+        // SSH Connection result
+        
+        bool success = SSH.IsConnected();
+        
+        bool succ = ntm.ReadBool();
+        string err = ntm.ReadString();
+        
+        if(success){
+            SetupConnection();
+        }else{
+            connectionError = err;
+            ConnectScreen();
+        }
+        
+        return;
+    }
+}
+Event.AddListener("IncomingNTM", "ntm", "IncomingNTM");
+
+function OnPlayerStartedUsing(Player ply){
+    Print("test");
+    CheckUser();
+}
+Event.AddListener("PlayerStartedUsing", "using", "OnPlayerStartedUsing");
+
+/////////////////
+// Application //
+/////////////////
+
+function Initialize(){
+    Application.RequestAdminPrivilege();
+    
+    if(Application.HasAdminPrivilege() == false){
+        AdminScreen();
+        return;
+    }
+    
+    SetupConnection();
+}
+
+// Run //
+
+Initialize();
+
+while(true){
+    Event.Process();
+    
+    if(connected){
+        if(SSH.IsConnected() == false){
+            Disconnect();
+        }
+    }
+}

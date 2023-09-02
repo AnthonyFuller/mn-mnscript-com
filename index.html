@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MNScript - Enhance your business with custom software</title>
+
+    <meta content="mn.mnscript.com" property="og:title" />
+    <meta content="MNScript - Enhance your business with custom software" property="og:description" />
+    <meta content="#000000" data-react-helmet="true" name="theme-color" />
+
+    <style>
+        @font-face {
+            font-family: "Code Pro LC";
+            src: url("fonts/Code-Pro-LC.woff2") format("woff2"),
+                url("fonts/Code-Pro-LC.woff") format("woff");
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Trebuchet MS';
+            src: url('fonts/TrebuchetMS.woff2') format('woff2'),
+                url('fonts/TrebuchetMS.woff') format('woff');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+    </style>
+    <style>
+        :root {
+            --base-font: "Code Pro LC";
+            --secondary-font: "Trebuchet MS", "Times New Roman", sans-serif;
+            --dark: rgba(35, 35, 40, 255);
+            --blue: rgba(45, 45, 55, 255);
+            --black: rgba(0, 0, 0, 255);
+            --white: rgba(244, 244, 255, 255);
+            --green: rgba(100, 200, 100, 255);
+        }
+
+        body {
+            color: var(--white);
+            background-color: var(--dark);
+            padding: 0;
+            margin: 0;
+            font-family: var(--base-font);
+        }
+
+        .titlebar {
+            background-color: var(--blue);
+            display: flex;
+            flex-wrap: wrap;
+            align-items: last baseline;
+            margin-bottom: 10px;
+            padding: 10px 10px;
+        }
+
+        .titlebar-title {
+            margin: 0;
+            margin-right: 45px;
+        }
+
+        .titlebar-text {
+            margin: 0;
+        }
+
+        .page-content {
+            margin: 0 auto;
+            width: 98%;
+        }
+
+        .container {
+            background-color: var(--blue);
+            padding: 10px 15px;
+            margin-bottom: 10px;
+        }
+
+        .container-header {
+            margin: 0;
+            margin-bottom: 5px;
+            font-size: 16px;
+        }
+
+        .container-text {
+            margin: 0;
+        }
+
+        .card-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .card {
+            color: var(--black);
+            background-color: var(--white);
+            border-radius: 5px;
+            padding: 5px 15px;
+            min-width: 200px;
+            text-align: center;
+            font-family: var(--secondary-font);
+        }
+
+        .card-text {
+            margin: 5px 0;
+        }
+
+        .card-button {
+            color: var(--white);
+            background-color: var(--green);
+            width: 100%;
+            border: 0;
+            border-radius: 5px;
+            padding: 4px 0px;
+        }
+
+        .card-button:hover {
+            background-color: var(--black);
+            cursor: pointer;
+        }
+
+        /* Medium devices (landscape tablets, 768px and up) */
+        @media only screen and (min-width: 768px) {
+            .titlebar {
+                text-align: center;
+            }
+
+            .card-container {
+                flex-direction: row;
+                justify-content: start;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header class="titlebar">
+        <h1 class="titlebar-title">MNScript</h1>
+        <p class="titlebar-text">The most advanced GMod Scripting Language</p>
+    </header>
+
+    <main class="page-content">
+        <section class="container">
+            <p class="container-text">Run .mscx files using 'mnscript exec fileName.mscx'</p>
+            <p class="container-text">.msc Source code available for educational purposes</p>
+        </section>
+
+        <section class="container">
+            <h2 class="container-header">MN SSH - Connect to Servers via SSH</h2>
+            <div class="card-container">
+                <div class="card">
+                    <p class="card-text">file: mnssh.mscx</p>
+                    <a href="downloads/mnssh.mscx" download="mnssh.mscx">
+                        <button class="card-button">DOWNLOAD</button>
+                    </a>
+                </div>
+                <div class="card">
+                    <p class="card-text">file: mnssh.msc</p>
+                    <a href="downloads/mnssh.msc" download="mnssh.msc">
+                        <button class="card-button">DOWNLOAD</button>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <section class="container">
+            <h2 class="container-header">VCMINE - Optimize VCMiner core speed & Temperature</h2>
+            <div class="card-container">
+                <div class="card">
+                    <p class="card-text">file: vcmine.mscx</p>
+                    <a href="downloads/vcmine.mscx" download="vcmine.mscx">
+                        <button class="card-button">DOWNLOAD</button>
+                    </a>
+                </div>
+                <div class="card">
+                    <p class="card-text">file: vcmine.msc</p>
+                    <a href="downloads/vcmine.msc" download="vcmine.msc">
+                        <button class="card-button">DOWNLOAD</button>
+                    </a>
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+
+</html>

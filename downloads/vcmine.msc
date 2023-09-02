@@ -1,0 +1,264 @@
+using System;
+using Console;
+using Peripheral;
+using Array;
+using Math;
+using Event;
+using Surface;
+using VentzCoin;
+using Application;
+using Util;
+
+// VERY BASIC VCMiner temperature control system.
+// Will increase your miners core speed until an acceptable temperature is met.
+number upperLimit = 85;
+number lowerLimit = 82;
+number maxCore = 170;
+number maxTemp = 89;
+
+number interval = 0.5;
+number increaseRate = 0.1;
+number decreaseRate = 0.1;
+
+// Colors//
+Color transparent = new Color(0,0,0,0);
+Color bgColor = new Color(24,24,31,255);
+Color bgColor2 = new Color(30,30,37,255);
+Color fgColor = new Color(35,35,40,255);
+Color textColor = new Color(210,210,230,255);
+Color red = new Color(200,100,100,255);
+Color green = new Color(100,200,100,255);
+Color orange = new Color(255,140,100,255);
+Color blue = new Color(100,150,200,255);
+
+Application.CreateDesktopIcon("https://i.imgur.com/lXVW2TM.png");
+
+MNGuiFrame frame = Surface.CreateApplicationFrame();
+MNGuiPanel panel = frame.GetPanel();
+MNGuiPanel screen = Surface.CreatePanel(panel);
+
+/////////
+// GUI //
+/////////
+
+function<MNGuiLabel> Label(MNGuiPanel parent){
+    MNGuiLabel label = Surface.CreateLabel(parent);
+    label.SetFont("code_pro");
+    label.SetFontSize(20);
+    label.SetHeight(20);
+    label.SetTextColor(textColor);
+    
+    return label;
+}
+
+function CreateUI(){
+    screen.Remove();
+    
+    number vtc = VentzCoin.GetValue();
+    
+    screen = Surface.CreatePanel(panel);
+    screen.DockFill();
+    screen.SetBackgroundColor(transparent);
+    screen.SetBackgroundColor(bgColor);
+    
+    number numMiners = Array.Length(miners);
+    number width = Math.Min(0.3, 1 / (numMiners + 0.5));
+    number i = 1;
+    
+    if(numMiners == 0){
+        MNGuiLabel noMiners = Label(screen);
+        noMiners.DockFill();
+        noMiners.SetText("NO VCMINERS");
+        noMiners.SetTextColor(red);
+        noMiners.TextAlignCenter();
+    }
+    
+    while(i <= numMiners){
+        VCMiner miner = miners[i];
+        number temperature = Math.Round(miner.GetTemperature());
+        number core = Math.RoundTo(miner.GetCorePower(), 1);
+        number minedAmt = Math.RoundTo(miner.GetAmountMined(), 5);
+        string minedAmtMoney = Util.FormatMoney(Math.Round(minedAmt * vtc));
+        
+        MNGuiPanel minerPanel = Surface.CreatePanel(screen);
+        minerPanel.DockLeft();
+        minerPanel.SetDockMargin(2, 2, 2, 2);
+        minerPanel.SetScaleSize(width, 1);
+        minerPanel.SetRounded(3);
+        minerPanel.SetBackgroundColor(fgColor);
+        
+        MNGuiLabel title = Label(minerPanel);
+        title.DockTop();
+        title.SetDockMargin(5, 5, 5, 0);
+        title.SetText("Miner "..i);
+        
+        MNGuiLabel mined = Label(minerPanel);
+        mined.DockTop();
+        mined.SetDockMargin(5, 5, 5, 0);
+        mined.SetText(minedAmt.." VTC");
+        mined.SetFontSize(14);
+        mined.SetHeight(14);
+        
+        MNGuiLabel mined2 = Label(minerPanel);
+        mined2.DockTop();
+        mined2.SetDockMargin(5, 5, 5, 0);
+        mined2.SetText(minedAmtMoney);
+        mined2.SetFontSize(12);
+        mined2.SetHeight(12);
+        
+        if(miner.HasCooler() == false){
+            MNGuiLabel noCooler = Label(minerPanel);
+            noCooler.DockTop();
+            noCooler.SetDockMargin(5, 5, 5, 0);
+            noCooler.SetText("NO COOLER");
+            noCooler.SetTextColor(red);
+            noCooler.SetFontSize(14);
+            noCooler.SetHeight(30);
+        }
+        
+        if(miner.HasValidWallet() == false){
+            MNGuiLabel noWallet = Label(minerPanel);
+            noWallet.DockTop();
+            noWallet.SetDockMargin(5, 5, 5, 0);
+            noWallet.SetText("NO WALLET");
+            noWallet.SetTextColor(red);
+            noWallet.SetFontSize(14);
+            noWallet.SetHeight(30);
+        }
+        
+        MNGuiPanel bottom = Surface.CreatePanel(minerPanel);
+        bottom.DockBottom();
+        bottom.SetDockMargin(5, 5, 5, 5);
+        bottom.SetScaleSize(1, 0.5);
+        bottom.SetBackgroundColor(bgColor2);
+        
+        MNGuiPanel temp = Surface.CreatePanel(bottom);
+        temp.DockLeft();
+        temp.SetDockMargin(3, 3, 3, 3);
+        temp.SetScaleSize(0.45, 1);
+        temp.SetBackgroundColor(bgColor);
+        
+        number tempPercent = temperature / 110;
+        
+        MNGuiPanel tempPanel = Surface.CreatePanel(temp);
+        tempPanel.SetScaleSize(1, tempPercent);
+        tempPanel.SetScalePos(0, 1 - tempPercent);
+        tempPanel.SetBackgroundColor(orange);
+        
+        MNGuiLabel tempLabel = Label(temp);
+        tempLabel.SetScaleSize(1, 1);
+        tempLabel.SetPos(5, 5);
+        tempLabel.SetText(temperature.." c");
+        tempLabel.SetFontSize(12);
+        tempLabel.SetHeight(12);
+        
+        MNGuiPanel corePanel = Surface.CreatePanel(bottom);
+        corePanel.DockRight();
+        corePanel.SetDockMargin(3, 3, 3, 3);
+        corePanel.SetScaleSize(0.45, 1);
+        corePanel.SetBackgroundColor(bgColor);
+        
+        number corePercent = core / 200;
+        number corePercent1 = Math.Min(corePercent, 0.5);
+        number corePercent2 = Math.Max(0, corePercent - 0.5);
+        
+        MNGuiPanel corePanel2 = Surface.CreatePanel(corePanel);
+        corePanel2.SetScaleSize(1, corePercent1);
+        corePanel2.SetScalePos(0, 1 - corePercent1);
+        corePanel2.SetBackgroundColor(blue);
+        
+        if(corePercent2 > 0){
+            MNGuiPanel corePanel3 = Surface.CreatePanel(corePanel);
+            corePanel3.SetScaleSize(1, corePercent2);
+            corePanel3.SetScalePos(0, 0.5 - corePercent2);
+            corePanel3.SetBackgroundColor(green);
+        }
+        
+        MNGuiLabel coreLabel = Label(corePanel);
+        coreLabel.SetScaleSize(1, 1);
+        coreLabel.SetPos(5, 5);
+        coreLabel.SetText(core.." %");
+        coreLabel.SetFontSize(12);
+        coreLabel.SetHeight(12);
+        
+        i = i + 1;
+    }
+    
+    Surface.Update();
+}
+
+/////////////////
+// Application //
+/////////////////
+
+VCMiner[] miners = new VCMiner[0];
+
+function LoadMiners(){
+    miners = Peripheral.GetConnectedVCMiners();
+    
+    CreateUI();
+}
+
+function HandleMiners(){
+    number numMiners = Array.Length(miners);
+    number i = 1;
+    
+    while(i <= numMiners){
+        HandleMiner(miners[i]);
+        i = i + 1;
+    }
+}
+
+function HandleMiner(VCMiner miner){
+    number temp = miner.GetTemperature();
+    number core = miner.GetCorePower();
+    number newCore = core;
+    
+    if(temp < lowerLimit){
+        // Increase temp based on how much under the limit we are
+        number increase = Math.Max(increaseRate, (lowerLimit - temp) * 0.3);
+        increase = Math.Min(increase, 2);
+        
+        newCore = Math.Min(core + increase, maxCore);
+    }
+    
+    if(temp > upperLimit){
+        // Decrease temp when we are over the limit
+        newCore = core - decreaseRate;
+    }
+    
+    if(temp >= maxTemp){
+        // Emergency decrease temperature if overheating
+        newCore = core - Math.Abs((maxTemp - temp) * 3);
+    }
+    
+    if(miner.HasCooler() == false || miner.HasValidWallet() == false){
+        if(miner.IsMining()){
+            miner.StopMining();
+        }
+        
+        newCore = 0;
+    }else{
+        if(miner.IsMining() == false){
+           miner.StartMining();
+        }
+    }
+
+    miner.SetCorePower(newCore);
+}
+
+LoadMiners();
+
+number lastLoad = 0;
+
+while(true){
+    HandleMiners();
+    
+    System.Sleep(interval);
+    
+    if(System.Time() - lastLoad > 3){
+        // Look for connected VCMiners every 3 seconds
+        lastLoad = System.Time();
+        LoadMiners();
+    }
+}
